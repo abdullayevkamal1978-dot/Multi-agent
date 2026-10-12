@@ -148,3 +148,45 @@ def write_report(
         path.write_text(render_json(report), encoding="utf-8")
         written.append(path)
     return written
+
+
+def render_html(report: ResearchReport) -> str:
+    """Render a self-contained, print-friendly HTML report."""
+    import html
+
+    esc = html.escape
+    sections = [f"<h1>{esc(report.topic)}</h1>", f"<p class=meta>Generated {esc(report.generated_at)}</p>",
+                f"<h2>Executive summary</h2><p>{esc(report.executive_summary or 'Not available.')}</p>", "<h2>Key findings</h2>"]
+    for finding in report.findings:
+        sections.append(f"<article><h3>{esc(finding.heading)}</h3><p>{esc(finding.detail)}</p><small>Sources: {esc(', '.join(finding.source_ids) or 'uncited')} · confidence {finding.confidence:.2f}</small></article>")
+    sections.append("<h2>Contradictions and disagreements</h2>")
+    for item in report.contradictions:
+        sections.append(f"<article><h3>{esc(item.topic or 'Disagreement')} — {esc(item.severity)}</h3><p>{esc(item.description)}</p><p><strong>Resolution:</strong> {esc(item.resolution or 'Unresolved')}</p></article>")
+    sections.append("<h2>Open questions</h2><ul>" + "".join(f"<li>{esc(q)}</li>" for q in report.open_questions) + "</ul><h2>Sources</h2><ul>")
+    sections.extend(f'<li><a href="{esc(src.url, quote=True)}">{esc(src.title or src.url)}</a> [{esc(src.id)}]</li>' for src in report.sources)
+    sections.append("</ul>")
+    return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + esc(report.topic) + "</title><style>body{font:16px/1.65 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1.5rem;color:#172033}h1,h2{color:#173b63}article{border-left:3px solid #6c93bb;padding:.5rem 1rem;margin:1rem 0;background:#f5f8fb}.meta,small{color:#627084}@media print{body{margin:0;max-width:none}}</style></head><body>" + "\n".join(sections) + "</body></html>"
+
+
+def render_pdf(report: ResearchReport) -> bytes:
+    """Render a simple PDF. Requires the optional ``reportlab`` dependency."""
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+        from xml.sax.saxutils import escape
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("Install the 'app' extra to export PDF (pip install -e '.[app]').") from exc
+    from io import BytesIO
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=letter, rightMargin=0.7*inch, leftMargin=0.7*inch)
+    styles = getSampleStyleSheet()
+    story = [Paragraph(escape(report.topic), styles["Title"]), Spacer(1, 12), Paragraph("Executive summary", styles["Heading2"]), Paragraph(escape(report.executive_summary or "Not available."), styles["BodyText"])]
+    for title, body in [(f.heading, f.detail) for f in report.findings] + [(c.topic or "Disagreement", c.description + " Resolution: " + c.resolution) for c in report.contradictions]:
+        story += [Paragraph(escape(title), styles["Heading2"]), Paragraph(escape(body), styles["BodyText"]), Spacer(1, 8)]
+    story.append(Paragraph("Sources", styles["Heading2"]))
+    for src in report.sources:
+        story.append(Paragraph(f"[{escape(src.id)}] {escape(src.title or src.url)} — {escape(src.url)}", styles["BodyText"]))
+    doc.build(story)
+    return output.getvalue()

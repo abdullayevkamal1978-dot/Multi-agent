@@ -1,0 +1,17 @@
+[server]
+headless = true
+enableStaticServing = true
+enableCORS = true
+enableXsrfProtection = true
+corsAllowedOrigins = ["http://127.0.0.1:8501", "http://localhost:8501"]
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0d7f78"
+backgroundColor = "#f7f8f5"
+secondaryBackgroundColor = "#edf2ef"
+textColor = "#162b3d"
+font = "sans serif"

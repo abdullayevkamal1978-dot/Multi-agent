@@ -85,12 +85,21 @@ async def research_subquestion(
 async def _read(runtime: Runtime, source: Source) -> None:
     """Populate ``source.content`` in place; record failures instead of raising."""
     if source.content:
+        if not await runtime.fetcher.is_allowed_by_robots(source.url):
+            source.content = ""
+            source.snippet = ""
+            source.error = "blocked by robots.txt (or robots policy unavailable)"
+            source.fetched = False
+            return
         source.fetched = True
         return
     title, text, error = await runtime.fetcher.fetch(source.url)
     if error:
         source.error = error
         source.fetched = False
+        if error.startswith("blocked by robots.txt"):
+            source.content = ""
+            source.snippet = ""
         return
     source.fetched = True
     if title and (not source.title or source.title == source.url):

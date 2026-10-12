@@ -11,11 +11,13 @@ import asyncio
 import hashlib
 import json
 import re
+import urllib.robotparser
+from urllib.parse import urlsplit, urlunsplit
 from html.parser import HTMLParser
 from pathlib import Path
 
 from research_swarm.config import Settings
-from research_swarm.providers.http import request
+from research_swarm.providers.http import get_client, request
 
 _SKIP_TAGS = {
     "script",
@@ -38,6 +40,8 @@ _BLOCK_TAGS = {
 }
 _WHITESPACE_RE = re.compile(r"[ \t\u00a0]+")
 _BLANKS_RE = re.compile(r"\n{3,}")
+_ROBOTS_CACHE: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+_ROBOTS_LOCK = asyncio.Lock()
 
 
 class _Extractor(HTMLParser):
@@ -134,17 +138,62 @@ class PageFetcher:
         except OSError:
             pass
 
+    async def _allowed_by_robots(self, url: str) -> bool:
+        """Honor the origin's robots policy; fail closed when policy cannot be read."""
+        parts = urlsplit(url)
+        if parts.scheme not in {"http", "https"} or not parts.netloc:
+            return False
+        origin = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+        async with _ROBOTS_LOCK:
+            if origin not in _ROBOTS_CACHE:
+                robots_url = origin + "/robots.txt"
+                try:
+                    response = await request(
+                        "GET", robots_url, settings=self._settings, max_attempts=1
+                    )
+                    parser = urllib.robotparser.RobotFileParser()
+                    parser.set_url(robots_url)
+                    parser.parse(response.text.splitlines())
+                    _ROBOTS_CACHE[origin] = parser
+                except Exception:
+                    # A 404 means no policy; other failures are conservatively blocked.
+                    # The shared request helper raises on 404, so explicitly distinguish it.
+                    try:
+                        response = await get_client(self._settings).get(robots_url)
+                        if response.status_code == 404:
+                            _ROBOTS_CACHE[origin] = None
+                        elif response.is_success:
+                            parser = urllib.robotparser.RobotFileParser()
+                            parser.set_url(robots_url)
+                            parser.parse(response.text.splitlines())
+                            _ROBOTS_CACHE[origin] = parser
+                        else:
+                            return False
+                    except Exception:
+                        return False
+            parser = _ROBOTS_CACHE[origin]
+        return parser is None or parser.can_fetch("research-swarm", url)
+
+    async def is_allowed_by_robots(self, url: str) -> bool:
+        """Expose the same robots gate to providers that return page text."""
+        if urlparse_host(url).endswith("mock.example"):
+            return True
+        return await self._allowed_by_robots(url)
+
     # ---- fetching --------------------------------------------------------
     async def fetch(self, url: str) -> tuple[str, str, str | None]:
         """Return ``(title, text, error)``. Errors never raise."""
-        cached = self._read_cache(url)
-        if cached is not None:
-            return cached[0], cached[1], None
-
         if urlparse_host(url).endswith("mock.example"):
             title, text = _synthetic_page(url)
             self._write_cache(url, (title, text))
             return title, text, None
+
+        if not await self.is_allowed_by_robots(url):
+            return "", "", "blocked by robots.txt (or robots policy unavailable)"
+
+        cached = self._read_cache(url)
+        if cached is not None:
+            return cached[0], cached[1], None
 
         async with self._semaphore:
             try:
