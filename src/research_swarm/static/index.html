@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>research-swarm — multi-agent derin araştırma</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b0f14;color:#e6edf3;font:15px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px}
+header{padding:26px 0 4px}
+h1{margin:0;font-size:23px;letter-spacing:-.01em}
+.sub{margin:6px 0 0;color:#8b98a9;font-size:14px}
+#form{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0 0}
+#topic{flex:1;min-width:260px;padding:12px 14px;border-radius:10px;border:1px solid #1e2836;background:#121822;color:#e6edf3;font-size:15px;outline:none}
+#topic:focus{border-color:#4f9cf9}
+label.chk{display:inline-flex;align-items:center;gap:7px;color:#8b98a9;font-size:13.5px;cursor:pointer;user-select:none}
+button{padding:12px 22px;border-radius:10px;border:0;background:#4f9cf9;color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+button:disabled{opacity:.5;cursor:default}
+#pipeline{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border:1px solid #1e2836;border-radius:999px;color:#8b98a9;font-size:13px;transition:.2s}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.chip.active{border-color:#4f9cf9;color:#e6edf3;box-shadow:0 0 0 3px rgba(79,156,249,.15)}
+.chip.active .dot{background:#4f9cf9;animation:pulse 1s ease-in-out infinite}
+.chip.done{border-color:rgba(63,185,80,.45);color:#3fb950}
+.chip.done .dot{background:#3fb950;animation:none}
+.cnt{color:#4f9cf9;font-variant-numeric:tabular-nums}
+@keyframes pulse{50%{opacity:.25}}
+#status{margin:10px 0 0;color:#8b98a9;font-size:13px;min-height:18px}
+#status.err{color:#f0883e}
+#status.ok{color:#3fb950}
+.grid{display:grid;grid-template-columns:400px 1fr;gap:16px;margin:18px 0 44px}
+@media(max-width:940px){.grid{grid-template-columns:1fr}}
+.card{background:#121822;border:1px solid #1e2836;border-radius:14px;padding:15px;margin-bottom:16px}
+.card h2{margin:0 0 11px;font-size:12px;color:#8b98a9;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+#log{max-height:190px;overflow-y:auto;font:12px/1.75 ui-monospace,Menlo,monospace;color:#8b98a9}
+#log div{word-break:break-word}
+.q{border:1px solid #1e2836;border-radius:10px;padding:9px 11px;margin-bottom:9px}
+.q b{color:#e6edf3;font-size:13.5px}
+.q .why{color:#8b98a9;font-size:12.5px;margin:3px 0 0}
+.q ul{margin:6px 0 0;padding-left:16px;color:#4f9cf9;font-size:12px;font-family:ui-monospace,Menlo,monospace}
+.src{border:1px solid #1e2836;border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.src .top{display:flex;gap:8px;align-items:baseline}
+.sid{color:#4f9cf9;font:600 12px ui-monospace,Menlo,monospace;flex:none}
+.src a{color:#e6edf3;text-decoration:none;font-weight:600;font-size:14px;word-break:break-all}
+.src a:hover{color:#4f9cf9}
+.meta{color:#8b98a9;font-size:11.5px;margin:4px 0 0;display:flex;gap:8px;flex-wrap:wrap}
+.pill{border:1px solid #1e2836;border-radius:6px;padding:0 6px}
+.pill.warn{color:#f0883e;border-color:rgba(240,136,62,.4)}
+.snip{color:#b6c2cf;font-size:13px;margin:6px 0 0}
+details{margin-top:7px}
+summary{color:#8b98a9;font-size:12px;cursor:pointer}
+details ul{margin:6px 0 0;padding-left:16px;color:#b6c2cf;font-size:12.5px}
+.contra{border:1px solid rgba(240,136,62,.35);border-radius:10px;padding:11px 12px;margin-bottom:10px}
+.contra .sev{float:right;font:600 11px ui-monospace,Menlo,monospace;border-radius:6px;padding:1px 7px;border:1px solid}
+.sev.low{color:#8b98a9;border-color:#1e2836}
+.sev.medium{color:#e3b341;border-color:rgba(227,179,65,.4)}
+.sev.high{color:#f85149;border-color:rgba(248,81,73,.45)}
+.contra b{color:#f0883e;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.contra p{margin:6px 0;font-size:13px;color:#b6c2cf}
+.contra .res{color:#8b98a9;font-size:12.5px;border-top:1px dashed #1e2836;padding-top:6px;margin-top:8px}
+.find{border:1px solid #1e2836;border-radius:10px;padding:11px 12px;margin-bottom:10px}
+.find h3{margin:0;font-size:15px;color:#e6edf3}
+.find p{margin:6px 0 0;font-size:13.5px;color:#b6c2cf}
+.cites{color:#4f9cf9;font:600 11.5px ui-monospace,Menlo,monospace;margin-top:6px;display:block}
+#exec{color:#b6c2cf;font-size:14.5px;margin:0 0 14px}
+#openq{margin:0;padding-left:18px;color:#8b98a9;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.stat{border:1px solid #1e2836;border-radius:9px;padding:8px 10px}
+.stat .k{color:#8b98a9;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.stat .v{color:#e6edf3;font:600 16px ui-monospace,Menlo,monospace;margin-top:2px}
+.empty{color:#4a5568;font-size:13px}
+footer{color:#4a5568;font-size:12px;padding:0 0 30px}
+code{background:#0b0f14;border:1px solid #1e2836;border-radius:5px;padding:0 5px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>🔬 research-swarm</h1>
+  <p class="sub">Multi-agent derin araştırma — planlar, paralel arar, okur, <b>çelişkileri</b> bulur ve atıflı rapor üretir.</p>
+</header>
+
+<form id="form">
+  <input id="topic" placeholder="Mövzu yaz… məs. solid-state battery commercialization timeline" required minlength="3" maxlength="300"/>
+  <label class="chk"><input type="checkbox" id="mock"/> Demo (mock, anahtar gerekmez)</label>
+  <button id="btn">Araştır</button>
+</form>
+
+<div id="pipeline">
+  <div class="chip" id="chip-plan"><span class="dot"></span>Plan</div>
+  <div class="chip" id="chip-research"><span class="dot"></span>Araştırma <span class="cnt" id="cnt-research"></span></div>
+  <div class="chip" id="chip-check"><span class="dot"></span>Çapraz kontrol</div>
+  <div class="chip" id="chip-synth"><span class="dot"></span>Sentez</div>
+</div>
+<p id="status"></p>
+
+<main class="grid">
+  <section>
+    <div class="card" id="planCard" hidden><h2>Plan</h2><div id="plan"></div></div>
+    <div class="card"><h2>Akış</h2><div id="log"></div></div>
+    <div class="card"><h2>Kaynaklar <span class="cnt" id="cnt-src"></span></h2><div id="sources"><div class="empty">Kaynaklar burada listelenecek…</div></div></div>
+  </section>
+  <section>
+    <div class="card" id="contraCard" hidden><h2>Çelişkiler</h2><div id="contradictions"></div></div>
+    <div class="card" id="findCard" hidden><h2>Bulgular</h2><p id="exec"></p><div id="findings"></div></div>
+    <div class="card" id="openCard" hidden><h2>Açık sorular</h2><ul id="openq"></ul></div>
+    <div class="card" id="statsCard" hidden><h2>Çalışma istatistikleri</h2><div class="stats" id="stats"></div></div>
+  </section>
+</main>
+<footer>Demo modu: <code>research-web</code> → <code>http://127.0.0.1:8000</code></footer>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const STEPS=["plan","research","check","synth"];
+let es=null,finished=true;
+
+function reset(){
+  finished=false;
+  STEPS.forEach(s=>$("chip-"+s).className="chip");
+  ["cnt-research","cnt-src"].forEach(id=>$(id).textContent="");
+  $("log").innerHTML="";
+  $("planCard").hidden=true;$("plan").innerHTML="";
+  $("sources").innerHTML='<div class="empty">Kaynaklar toplanıyor…</div>';
+  $("contraCard").hidden=true;$("contradictions").innerHTML="";
+  $("findCard").hidden=true;$("findings").innerHTML="";$("exec").textContent="";
+  $("openCard").hidden=true;$("openq").innerHTML="";
+  $("statsCard").hidden=true;$("stats").innerHTML="";
+  $("status").className="";$("status").textContent="";
+}
+function log(t){const d=document.createElement("div");d.textContent=t;$("log").appendChild(d);$("log").scrollTop=1e9;}
+function markActive(step){
+  const i=STEPS.indexOf(step);
+  STEPS.forEach((s,k)=>{const c=$("chip-"+s);c.classList.remove("active","done");if(k<i)c.classList.add("done");if(k===i)c.classList.add("active");});
+}
+function markDone(step){const c=$("chip-"+step);c.classList.remove("active");c.classList.add("done");}
+
+function renderPlan(plan){
+  $("planCard").hidden=false;
+  const html=(plan.sub_questions||[]).map(q=>
+    `<div class="q"><b>${esc(q.id)}. ${esc(q.question)}</b>`
+    +(q.rationale?`<p class="why">${esc(q.rationale)}</p>`:"")
+    +((q.search_queries||[]).length?`<ul>${q.search_queries.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul>`:"")
+    +`</div>`).join("");
+  $("plan").innerHTML=html+(plan.scope?`<p class="why">${esc(plan.scope)}</p>`:"");
+}
+
+function addSources(list){
+  const holder=$("sources");
+  const empty=holder.querySelector(".empty");if(empty)empty.remove();
+  list.forEach(s=>{
+    const d=document.createElement("div");d.className="src";
+    const badge=s.error?`<span class="pill warn">${esc(s.error)}</span>`
+      :(s.fetched===false?`<span class="pill warn">okunamadı</span>`:"");
+    d.innerHTML=
+      `<div class="top"><span class="sid">${esc(s.id)}</span>`+
+      `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title||s.url)}</a></div>`+
+      `<div class="meta">`+(s.provider?`<span class="pill">${esc(s.provider)}</span>`:"")+
+      (s.query?`<span>${esc(s.query)}</span>`:"")+
+      (typeof s.score==="number"?`<span class="pill">skor ${s.score.toFixed(2)}</span>`:"")+
+      badge+`</div>`+
+      (s.snippet?`<p class="snip">${esc(s.snippet)}</p>`:"");
+    holder.appendChild(d);
+  });
+  $("cnt-src").textContent=holder.querySelectorAll(".src").length;
+}
+
+function addClaims(list){
+  if(!list||!list.length)return;
+  const holder=$("sources");
+  const d=document.createElement("div");d.className="src";
+  d.innerHTML=`<div class="top"><span class="sid">iddialar</span></div>`+
+    `<ul style="margin:6px 0 0;padding-left:16px;color:#b6c2cf;font-size:12.5px">`+
+    list.map(c=>`<li>${esc(c.statement)} <span class="cites">${esc((c.source_ids||[]).join(" "))}</span></li>`).join("")+
+    `</ul>`;
+  holder.appendChild(d);
+}
+
+function renderContradictions(list){
+  if(!list||!list.length)return;
+  $("contraCard").hidden=false;
+  $("contradictions").innerHTML=list.map(c=>
+    `<div class="contra"><span class="sev ${esc(c.severity)}">${esc(c.severity)}</span>`+
+    `<b>⚡ ${esc(c.topic)}</b><p>${esc(c.description)}</p>`+
+    (c.positions||[]).map(p=>`<p>• ${esc(p)}</p>`).join("")+
+    (c.resolution?`<div class="res"><b style="color:#8b98a9">Çözüm:</b> ${esc(c.resolution)}</div>`:"")+
+    `</div>`).join("");
+}
+
+function renderFindings(d){
+  $("findCard").hidden=false;
+  if(d.executive_summary)$("exec").textContent=d.executive_summary;
+  $("findings").innerHTML=(d.findings||[]).map(f=>
+    `<div class="find"><h3>${esc(f.heading)}</h3><p>${esc(f.detail)}</p>`+
+    `<span class="cites">${esc((f.source_ids||[]).join(" "))}</span></div>`).join("");
+  if((d.open_questions||[]).length){
+    $("openCard").hidden=false;
+    $("openq").innerHTML=d.open_questions.map(q=>`<li>${esc(q)}</li>`).join("");
+  }
+}
+
+function renderStats(s){
+  $("statsCard").hidden=false;
+  const items=[
+    ["süre",s.duration_seconds!=null?s.duration_seconds+"s":"—"],
+    ["alt soru",s.sub_questions],["sorgu",s.queries],
+    ["kaynak",s.sources_found+"/"+s.sources_fetched+" okundu"],
+    ["iddia",s.claims],["çelişki",s.contradictions],
+    ["LLM çağrısı",s.llm_calls],
+    ["model",s.llm_model||"—"],
+    ["LLM",s.llm_provider||"—"],["arama",s.search_provider||"—"],
+  ];
+  $("stats").innerHTML=items.map(([k,v])=>`<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
+  if((s.errors||[]).length)log("⚠ "+s.errors.join(" | "));
+}
+
+$("form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const topic=$("topic").value.trim();
+  if(!topic||finished&&!es)return;
+  reset();
+  $("btn").disabled=true;$("btn").textContent="Çalışıyor…";
+  log("▶ "+topic);
+
+  const qs=new URLSearchParams({topic});
+  if($("mock").checked)qs.set("mock","1");
+  es=new EventSource("/api/research?"+qs.toString());
+
+  es.addEventListener("start",e=>{
+    const d=JSON.parse(e.data);
+    $("status").textContent=`LLM: ${d.providers.llm} · arama: ${d.providers.search} · model: ${d.providers.model}`;
+    markActive("plan");
+  });
+  es.addEventListener("plan",e=>{const d=JSON.parse(e.data);renderPlan(d);markDone("plan");markActive("research");
+    log("◈ "+(d.sub_questions||[]).length+" alt soru");});
+  es.addEventListener("branch",e=>{
+    const d=JSON.parse(e.data);
+    addSources(d.sources||[]);addClaims(d.claims||[]);
+    if(d.branches_total)$("cnt-research").textContent=d.branches_done+"/"+d.branches_total;
+    log("→ dal "+d.branches_done+"/"+(d.branches_total||"?")+" · "+(d.sources||[]).length+" kaynak");
+  });
+  es.addEventListener("contradictions",e=>{
+    const c=JSON.parse(e.data);markDone("research");markDone("check");
+    renderContradictions(c);log("⚖ "+(c||[]).length+" çelişki bulundu");
+  });
+  es.addEventListener("findings",e=>{markDone("synth");renderFindings(JSON.parse(e.data));});
+  es.addEventListener("warning",e=>log("⚠ "+JSON.parse(e.data).message));
+  es.addEventListener("report",e=>{
+    const d=JSON.parse(e.data);
+    renderStats(d.stats||{});
+    STEPS.forEach(markDone);
+    finish(`✓ Hazır — ${(d.sources||[]).length} kaynak, ${(d.contradictions||[]).length} çelişki`,true);
+  });
+  es.addEventListener("failed",e=>finish("✗ Hata: "+JSON.parse(e.data).message,false));
+  es.onerror=()=>{if(!finished)finish("✗ Bağlantı kesildi",false);};
+});
+
+function finish(msg,ok){
+  finished=true;if(es){es.close();es=null;}
+  $("btn").disabled=false;$("btn").textContent="Araştır";
+  $("status").textContent=msg;$("status").className=ok?"ok":"err";
+}
+</script>
+</body>
+</html>

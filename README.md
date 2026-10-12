@@ -63,6 +63,48 @@ ikisinden birini yapın:
 > onlardan olgu çıkarmayı reddeder. Bu bilinçli bir dürüstlük kararıdır — sahte olgular
 > ürettirip rapora yazdırmaktansa boş dönmek doğrudur.
 
+## Web arayüzü (SSE)
+
+Aynı grafik, canlı akışlı bir arayüzle sarıldı. `research-web` tek bir HTML sayfası
+servis eder ve `/api/research` uç noktası grafiği **Server-Sent Events** ile yansıtır:
+
+```bash
+uv sync --extra web          # veya: pip install -e ".[web]"
+uv run research-web          # -> http://127.0.0.1:8000
+
+# Anahtar olmadan, ağsız deneme:
+# arayüzdeki "Demo" kutusunu işaretleyin ya da:
+curl -N "http://127.0.0.1:8000/api/research?topic=solid-state+batteries&mock=1"
+```
+
+Arayüzde görünenler: planlanan alt sorular, **dal dal** akan kaynaklar ve iddialar
+(her paralel researcher bitişinde güncellenen sayaç), şiddet kodlu çelişkiler,
+atıflı bulgular ve çalışma istatistikleri.
+
+| Uç nokta | Ne yapar |
+|---|---|
+| `GET /` | Tek dosyalık arayüz (dış bağımlılık yok) |
+| `GET /api/health` | Sağlayıcılar + anahtar *var mı* (değer asla döndürülmez) |
+| `GET /api/research?topic=…` | SSE akışı (`mock=1` demo modu) |
+
+### SSE tasarımı
+
+`run_research`'in senkron `on_event` kancası bir `asyncio.Queue` üzerine köprülenir;
+kancanın tetiklendiği döngü kuyruğu boşaltan döngüyle aynı olduğu için thread gerekmez.
+Düğümler UI olaylarına şu şekilde eşlenir:
+
+| Düğüm | Olay |
+|---|---|
+| `planner` | `plan` — alt sorular + arama sorguları |
+| `researcher` | `branch` — bir dalın kaynak/iddiaları + `branches_done/total` |
+| `crosscheck` | `contradictions` — şiddet, pozisyonlar, çözüm kararı |
+| `synthesizer` | `findings` — bulgular, yönetici özeti, açık sorular |
+
+Son `report` olayı tüm `ResearchReport`'u (istatistiklerle birlikte) taşır.
+`tests/test_server.py` bu akışın mock modda uçtan uca gerçek grafik güncelleri
+ürettiğini doğrular.
+
+
 Desteklenen sağlayıcılar: `gemini` `openai` `anthropic` · arama: `exa` `tavily` `serpapi` `gemini` `mock`.
 `LLM_PROVIDER` / `SEARCH_PROVIDER` boş bırakılırsa hangi anahtar varsa otomatik seçilir.
 
