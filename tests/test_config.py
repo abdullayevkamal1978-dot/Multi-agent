@@ -1,3 +1,8 @@
+import os
+from pathlib import Path
+
+import pytest
+
 from research_swarm.config import Settings
 
 
@@ -36,3 +41,38 @@ def test_with_overrides_is_immutable_and_selective():
     assert settings.max_subquestions == 5
     assert updated.max_subquestions == 9
     assert updated.llm_provider == "mock"
+
+
+def test_resolve_cache_dir_uses_configured_path_when_writable(tmp_path):
+    from research_swarm.config import _resolve_cache_dir
+
+    target = tmp_path / "cache"
+    assert _resolve_cache_dir(str(target)) == str(target)
+    assert (target / "pages").parent.exists()
+
+
+def test_resolve_cache_dir_empty_string_disables_disk_cache(tmp_path, monkeypatch):
+    from research_swarm.config import _resolve_cache_dir
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RESEARCH_CACHE_DIR", "")
+    # "" means "no preference" -> the default .cache is tried, and it works here.
+    assert _resolve_cache_dir("") == ".cache"
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_resolve_cache_dir_falls_back_when_project_is_read_only(tmp_path):
+    """Serverless runtimes mount the project read-only; only /tmp is writable."""
+    from research_swarm.config import _resolve_cache_dir
+
+    readonly = tmp_path / "ro"
+    readonly.mkdir()
+    os.chmod(readonly, 0o500)
+    try:
+        resolved = _resolve_cache_dir(str(readonly / "cache"))
+    finally:
+        os.chmod(readonly, 0o700)
+
+    assert resolved != str(readonly / "cache")
+    assert resolved  # non-empty: a writable temp location was found
+    Path(resolved, "probe").write_text("ok", encoding="utf-8")

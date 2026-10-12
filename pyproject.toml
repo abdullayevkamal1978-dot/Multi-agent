@@ -11,6 +11,9 @@ dependencies = [
     "httpx>=0.27",
     "pydantic>=2.9",
     "python-dotenv>=1.0",
+    # ASGI app (src/research_swarm/server.py). Core rather than optional because
+    # serverless platforms install only the base dependency set - see [tool.vercel].
+    "fastapi>=0.115",
 ]
 
 [project.optional-dependencies]
@@ -22,7 +25,8 @@ anthropic = ["langchain-anthropic>=0.3"]
 # so no SDK is strictly required).
 tavily = ["tavily-python>=0.5"]
 # Streaming web UI (SSE over FastAPI). Kept optional so the CLI stays lean.
-web = ["fastapi>=0.115", "uvicorn>=0.34"]
+# uvicorn only - fastapi is already a core dependency.
+web = ["uvicorn>=0.34"]
 all = [
     "langchain-google-genai>=2.0",
     "langchain-openai>=0.3",
@@ -46,6 +50,12 @@ packages = ["src/research_swarm"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/research_swarm/static" = "research_swarm/static"
+
+# Vercel's Python runtime looks for an ASGI app in a handful of default
+# filenames (app.py, main.py, server.py, ...). Our app lives inside the package,
+# so the entrypoint is declared explicitly: module path + ":" + app variable.
+[tool.vercel]
+entrypoint = "src.research_swarm.server:app"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

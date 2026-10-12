@@ -178,3 +178,44 @@ async def test_end_to_end_stream_in_mock_mode():
     branch = next(d for e, d in events if e == "branch")
     assert branch["branches_total"] >= 1
     assert branch["branches_done"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_heartbeat_while_pipeline_is_idle(monkeypatch):
+    """Idle HTTP/1.1 connections get dropped; a comment frame keeps it open."""
+
+    async def slow_run(topic, settings, *, on_event=None):
+        await asyncio.sleep(0.4)
+        return ResearchReport(topic=topic, executive_summary="done")
+
+    monkeypatch.setattr(server, "run_research", slow_run)
+    monkeypatch.setattr(server, "HEARTBEAT_SECONDS", 0.05)
+
+    settings = Settings(llm_provider="mock", search_provider="mock")
+    raw = ""
+    async for frame in server._events("a topic long enough", settings):
+        raw += frame
+
+    assert raw.count(": ping") >= 2
+    # Comments must not be parsed as events by EventSource.
+    assert "event: ping" not in raw
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_does_not_duplicate_or_reorder_events(monkeypatch):
+    async def instant(topic, settings, *, on_event=None):
+        if on_event:
+            on_event("planner", {"errors": ["planner: boom"]})
+        return ResearchReport(topic=topic, executive_summary="done")
+
+    monkeypatch.setattr(server, "run_research", instant)
+    monkeypatch.setattr(server, "HEARTBEAT_SECONDS", 30)
+
+    settings = Settings(llm_provider="mock", search_provider="mock")
+    frames = []
+    async for frame in server._events("a topic long enough", settings):
+        frames.append(frame)
+
+    events = [f.split("\n", 1)[0] for f in frames]
+    assert events == ["event: start", "event: warning", "event: report"]
+    assert ": ping" not in "".join(frames)

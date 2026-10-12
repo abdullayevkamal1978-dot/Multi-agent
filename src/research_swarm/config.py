@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -66,6 +67,30 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _resolve_cache_dir(raw: str) -> str:
+    """Return a writable cache directory, or "" to disable the disk cache.
+
+    Serverless runtimes (Vercel, Lambda) mount the project read-only and only
+    allow writes under ``/tmp``. A literal ``.cache`` would then never be
+    usable, so fall back to a temp path instead of silently doing nothing.
+    """
+    candidate = Path(raw or ".cache")
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+        probe = candidate / ".writable"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return str(candidate)
+    except OSError:
+        pass
+
+    fallback = Path(tempfile.gettempdir()) / "research-swarm-cache"
+    try:
+        fallback.mkdir(parents=True, exist_ok=True)
+        return str(fallback)
+    except OSError:
+        return ""
+
 @dataclass(frozen=True)
 class Settings:
     """All knobs for one research run."""
@@ -111,7 +136,7 @@ class Settings:
             max_concurrency=_env_int("RESEARCH_MAX_CONCURRENCY", 5),
             max_content_chars=_env_int("RESEARCH_MAX_CONTENT_CHARS", 6000),
             request_timeout=_env_float("RESEARCH_TIMEOUT_SECONDS", 30.0),
-            cache_dir=os.getenv("RESEARCH_CACHE_DIR", ".cache").strip() or ".cache",
+            cache_dir=_resolve_cache_dir(os.getenv("RESEARCH_CACHE_DIR", ".cache")),
         )
 
     # ---- provider resolution ---------------------------------------------

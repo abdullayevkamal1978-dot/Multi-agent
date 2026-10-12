@@ -87,6 +87,43 @@ atıflı bulgular ve çalışma istatistikleri.
 | `GET /api/health` | Sağlayıcılar + anahtar *var mı* (değer asla döndürülmez) |
 | `GET /api/research?topic=…` | SSE akışı (`mock=1` demo modu) |
 
+### Vercel'e dağıtım
+
+Giriş noktası `pyproject.toml` içinde açıkça bildiriliyor — Vercel varsayılan
+konumlarda (`app.py`, `main.py`, `server.py` …) ASGI uygulaması arar, bizimki
+pakedin içinde:
+
+```toml
+[tool.vercel]
+entrypoint = "src.research_swarm.server:app"
+```
+
+`fastapi` bu yüzden **çekirdek** bağımlılık: sunucu tabanlı platformlar yalnızca
+temel bağımlılıkları kurar, `web` extra'sı kurulmaz. `uvicorn` sadece yerel
+çalıştırma için extra'da kalır.
+
+`.vercelignore` paket boyutunu küçültür (testler, `.cache`, `out`, `.venv`).
+
+**Sınırlar ve sonuçları:**
+
+| Konu | Durum |
+|---|---|
+| Streaming / SSE | Destekleniyor — uzun akışlar sorunsuz |
+| Süre sınırı | Hobby **300 sn**, Pro **800 sn** (toplam istek süresi dahil) |
+| Demo modu (`mock=1`) | ~15 ms'de biter → sınırların çok altında |
+| Gerçek mod (Gemini) | Ölçülen planlayıcı çağrısı 68-169 sn idi → **300 sn'yi aşabilir** |
+| Dosya sistemi | Salt-okunur; yalnız `/tmp` yazılabilir (500 MB) |
+| Önbellek | Proje dizini salt-okunursa `Settings` bunu algılayıp `/tmp`'ye düşer |
+
+Gerçek mod için ya Pro'ya geçip `maxDuration`'ı artırmak ya da çalışmayı
+Vercel Workflows ile kalıcı hâle getirmek gerekir; tek bir HTTP isteği açık
+tutularak dakikalarca iş yaptırmak güvenilir değildir.
+
+Ayrıca akış, uzun sessizliklerde (ör. tek bir researcher dalı) `: ping`
+yorum çerçeveleri gönderir; HTTP/1.1 istemcileri ve proxy'ler boştaki
+bağlantıları kapattığı için bu gerekli. Aralığı `RESEARCH_WEB_HEARTBEAT_SECONDS`
+ile değiştirebilirsiniz.
+
 ### SSE tasarımı
 
 `run_research`'in senkron `on_event` kancası bir `asyncio.Queue` üzerine köprülenir;

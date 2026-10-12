@@ -1,0 +1,16 @@
+# Keep the serverless bundle small and free of local-only artefacts.
+.venv/
+.git/
+.cache/
+.out/
+out/
+tools/
+.vercel/
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.env.*
+!.env.example
+uv.lock

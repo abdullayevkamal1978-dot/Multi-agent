@@ -21,6 +21,12 @@ from research_swarm.runner import run_research
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# HTTP/1.1 clients and proxies close idle connections. The pipeline can be quiet
+# for a long stretch (a single researcher branch), so emit an SSE comment to keep
+# the stream open. Comments are ignored by EventSource. Tunable because some
+# proxies need a tighter interval than others.
+HEARTBEAT_SECONDS = float(os.getenv("RESEARCH_WEB_HEARTBEAT_SECONDS", "15") or 15)
+
 # Node names are defined in graph.py; the UI maps them onto pipeline steps.
 NODE_STEPS = {
     "planner": "plan",
@@ -149,7 +155,13 @@ async def _events(topic: str, settings: Settings) -> AsyncIterator[str]:
         )
 
         while True:
-            kind, payload = await queue.get()
+            try:
+                kind, payload = await asyncio.wait_for(
+                    queue.get(), timeout=HEARTBEAT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                yield ": ping\n\n"
+                continue
 
             if kind == "end":
                 break
