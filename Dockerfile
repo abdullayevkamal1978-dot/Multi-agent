@@ -11,6 +11,7 @@ COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY app ./app
+COPY public ./public
 COPY .streamlit/config.toml .streamlit/config.toml
 RUN uv sync --frozen --no-dev --extra app --extra all
 

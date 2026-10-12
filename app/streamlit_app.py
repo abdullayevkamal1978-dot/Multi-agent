@@ -80,7 +80,7 @@ with st.sidebar:
     if search == "exa" or (search == "auto" and site_exa_available):
         shared_exa = st.checkbox("Use the site's shared Exa credits for this run", value=False)
         if shared_exa:
-            st.warning("Shared quota: at most 2 research branches, 2 results per query, 3 runs per browser session and 20 attempts per app process per UTC day. Limits are in-memory safeguards, not an account-wide billing cap; replicas/restarts have separate windows. Provider charges may apply after free credits are exhausted.")
+            st.warning("Shared quota: at most 2 research branches, 2 results per query, 3 runs per browser session and 20 attempts per app process in each rolling 24-hour window. Limits are in-memory safeguards, not an account-wide billing cap; replicas/restarts have separate windows. Provider charges may apply after free credits are exhausted.")
     st.caption("Provider accounts may apply their own usage charges. Password fields are not stored in files or a database.")
     if llm == "mock" or search == "mock":
         st.info("Mock providers are for offline demos only; their generated evidence is synthetic.")

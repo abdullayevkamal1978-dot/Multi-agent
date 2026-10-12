@@ -174,20 +174,26 @@ class PageFetcher:
             parser = _ROBOTS_CACHE[origin]
         return parser is None or parser.can_fetch("research-swarm", url)
 
+    async def is_allowed_by_robots(self, url: str) -> bool:
+        """Expose the same robots gate to providers that return page text."""
+        if urlparse_host(url).endswith("mock.example"):
+            return True
+        return await self._allowed_by_robots(url)
+
     # ---- fetching --------------------------------------------------------
     async def fetch(self, url: str) -> tuple[str, str, str | None]:
         """Return ``(title, text, error)``. Errors never raise."""
-        cached = self._read_cache(url)
-        if cached is not None:
-            return cached[0], cached[1], None
-
         if urlparse_host(url).endswith("mock.example"):
             title, text = _synthetic_page(url)
             self._write_cache(url, (title, text))
             return title, text, None
 
-        if not await self._allowed_by_robots(url):
+        if not await self.is_allowed_by_robots(url):
             return "", "", "blocked by robots.txt (or robots policy unavailable)"
+
+        cached = self._read_cache(url)
+        if cached is not None:
+            return cached[0], cached[1], None
 
         async with self._semaphore:
             try:

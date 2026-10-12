@@ -58,7 +58,7 @@ uv run streamlit run app/streamlit_app.py
 
 For local development without provider credentials, use `auto`/`mock` or select the `mock` model and search provider.
 
-The optional site-owned Exa key is used only when a visitor explicitly checks **Use the site's shared Exa credits for this run**. Shared-key runs are limited to 2 research branches, 2 results per query, 3 starts per browser session per UTC day, and 20 starts per app process per UTC day. These in-memory limits are best-effort safeguards, **not** an account-wide billing cap; restarts, multiple replicas, and fresh browser sessions have separate counters. Bring your own Exa key for unrestricted runs, or configure an account-side spend limit with the provider.
+The optional site-owned Exa key is used only when a visitor explicitly checks **Use the site's shared Exa credits for this run**. Shared-key runs are limited to 2 research branches, 2 results per query, 3 starts per browser session in a rolling 24-hour window, and 20 starts per app process in a rolling 24-hour window. These in-memory limits are best-effort safeguards, **not** an account-wide billing cap; restarts, multiple replicas, and fresh browser sessions have separate counters. Bring your own Exa key for unrestricted runs, or configure an account-side spend limit with the provider.
 
 ## CLI
 
@@ -134,7 +134,7 @@ app/streamlit_app.py       interactive web interface
 ## Limitations
 
 - Research quality depends on the selected search provider, source quality, and LLM. Citations are constrained to collected sources, but citations do not prove that a claim is true.
-- `robots.txt` is checked per origin and cached for the process. If its policy cannot be retrieved, crawling is blocked conservatively; sites returning 404 are treated as having no published robots policy.
+- `robots.txt` is checked per origin before provider-supplied full text and before cached or network page content are used. If its policy cannot be retrieved, content is blocked conservatively; sites returning 404 are treated as having no published robots policy.
 - Live Exa verification is limited to the one-query smoke test documented above; it does not certify source quality or a complete live LLM run. Tavily and SerpAPI live checks remain unperformed.
 - The mock provider is for demos and tests only; its generated pages are fictional.
 
