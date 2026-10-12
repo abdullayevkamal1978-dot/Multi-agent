@@ -108,3 +108,20 @@ def test_write_report_creates_parent_directories(tmp_path):
 
 def test_write_report_is_a_noop_when_no_paths_given(tmp_path):
     assert write_report(_report()) == []
+
+
+def test_html_export_is_self_contained_and_escapes_content():
+    from research_swarm.report import render_html
+
+    report = _report()
+    report.topic = "Research <topic>"
+    rendered = render_html(report)
+    assert "<!doctype html>" in rendered.lower()
+    assert "Research &lt;topic&gt;" in rendered
+    assert "https://a.example" in rendered
+
+
+def test_pdf_export_returns_pdf_bytes():
+    from research_swarm.report import render_pdf
+
+    assert render_pdf(_report()).startswith(b"%PDF-")

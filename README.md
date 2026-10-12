@@ -1,151 +1,86 @@
-# research-swarm
+# Research Swarm
 
-**LangGraph üzerinde çalışan çok-ajanlı derin araştırma sistemi.**
-Bir konu verirsiniz; sistem planlar, paralel olarak web'de arar, sayfaları okur,
-kaynaklar arasındaki **çelişkileri** bulur ve atıflı bir rapor üretir.
+**A multi-agent deep-research system built with LangGraph.** Give it a question: it plans research branches, searches the web in parallel, reads pages, checks sources for disagreements, and produces a cited report.
 
-Saatler süren "mənbə tap → oxu → qeyd et → xülasə çıxar" döngüsünü dakikalara indirir.
+## Highlights
 
----
+- Parallel research branches with isolated errors and URL-based citation deduplication.
+- Structured Pydantic outputs for planning, claims, contradictions, and synthesis.
+- Exa, Tavily, SerpAPI, Gemini Grounding, and deterministic offline mock search providers.
+- Respect for each origin's `robots.txt`; disallowed pages are not fetched, and unavailable robots policies fail closed (HTTP 404 means no published policy).
+- CLI and Python API, plus an optional Streamlit interface.
+- Markdown, JSON, HTML, and PDF exports.
+- Offline end-to-end tests that require no API keys.
 
-## Neden bu, "LLM'e sor" demekten farklı?
-
-Tek bir LLM çağrısı kaynakları okuyamaz, birbiriyle karşılaştıramaz ve çelişkileri
-gizler. Bu proje işi **uzmanlaşmış ajanlara böler** ve en önemlisi **çapraz kontrol**
-adımını ayrı bir ajan olarak çalıştırır: aynı olgu hakkında iki kaynak uyuşmuyorsa bu
-gizlenmez, `## Contradictions and disagreements` başlığı altında kaynağıyla birlikte
-raporlanır. Çelişki bulunamaması da geçerli ve değerli bir sonuçtur.
-
----
-
-## Hızlı başlangıç
+## Quick start
 
 ```bash
-uv sync --extra google --extra dev     # veya: pip install -e ".[google]"
+uv sync --extra google --extra dev
+cp .env.example .env  # add provider keys as needed
 
-# Hiç API anahtarı olmadan tüm hattı çalıştır (mock mod):
+# Fully offline demo; no API keys or network access
 uv run research-swarm "solid-state battery commercialization timeline" --mock
 
-# Gerçek LLM ile:
-cp .env.example .env                   # anahtarları doldur
-uv run research-swarm "konu" --out report.md --json report.json
+# Run the web UI
+uv sync --extra app --extra google
+uv run streamlit run app/streamlit_app.py
 ```
 
----
+## Provider configuration
 
-## Hangi anahtar ne için gerekli?
-
-| Katman | Ne yapar | Zorunlu mu? |
+| Layer | Supported providers | Purpose |
 |---|---|---|
-| **LLM** (Gemini / OpenAI / Anthropic) | Planlama, claim çıkarımı, çelişki tespiti, sentez | Gerçek sonuçlar için evet |
-| **Arama** (Exa / Tavily / SerpAPI / Gemini grounding) | Kaynak bulma | Gerçek sonuçlar için evet |
+| LLM | Gemini, OpenAI, Anthropic, mock | Planning, claim extraction, contradiction checks, synthesis |
+| Search | Exa, Tavily, SerpAPI, Gemini Grounding, mock | Finding source pages |
 
-### "Sadece Gemini anahtarı yeterli mi?" — ölçülmüş cevap
+Set `LLM_PROVIDER` and `SEARCH_PROVIDER` to a provider name, or leave them as `auto` to select an available configured provider. Keys are read from environment variables: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, and `SERPAPI_API_KEY`.
 
-**LLM için evet.** `langchain-google-genai` ile test edildi, canlı çalışıyor.
+### Exa live smoke test
 
-**Arama için hayır.** Gemini'nin yerleşik *Google Search grounding* özelliği ücretsiz
-katmanda kapalı. Bu depoda canlı olarak doğrulandı:
-
-```
-429 RESOURCE_EXHAUSTED — You exceeded your current quota, please check your plan and billing details.
-```
-
-Yani tek Gemini anahtarıyla: **LLM gerçek, arama mock** olur. Gerçek web sonuçları için
-ikisinden birini yapın:
-
-1. Ücretsiz bir arama anahtarı ekleyin — **Exa** (yeni hesaba $20 kredi, aylık $10) veya
-   **Tavily** ücretsiz katman. `EXA_API_KEY` / `TAVILY_API_KEY` yeterli.
-2. Gemini faturalandırmasını açın, sonra `SEARCH_PROVIDER=gemini` ayarlayın.
-
-> Not: `mock` arama + gerçek LLM kombinasyonunda **0 claim** beklemelisiniz. Mock sayfalar
-> kendilerini açıkça "kurgusal demo" olarak işaretler ve gerçek bir LLM doğru şekilde
-> onlardan olgu çıkarmayı reddeder. Bu bilinçli bir dürüstlük kararıdır — sahte olgular
-> ürettirip rapora yazdırmaktansa boş dönmek doğrudur.
-
-Desteklenen sağlayıcılar: `gemini` `openai` `anthropic` · arama: `exa` `tavily` `serpapi` `gemini` `mock`.
-`LLM_PROVIDER` / `SEARCH_PROVIDER` boş bırakılırsa hangi anahtar varsa otomatik seçilir.
-
----
-
-## Mimari
-
-```
-                          ┌───────────────┐
-        START ───────────▶│   PLANNER     │  konuyu alt sorulara böler
-                          └───────┬───────┘
-                                  │  Send() ile koşullu kenar → fan-out
-              ┌───────────────────┼───────────────────┐
-              ▼                   ▼                   ▼
-       ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-       │ RESEARCHER  │     │ RESEARCHER  │ ... │ RESEARCHER  │   ← PARALEL
-       │ ara→oku→    │     │ ara→oku→    │     │ ara→oku→    │
-       │ claim çıkar │     │ claim çıkar │     │ claim çıkar │
-       └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-              └───────────────────┼───────────────────┘
-                                  ▼   örtük join: tüm dallar beklenir
-                          ┌───────────────┐
-                          │  CROSS-CHECK  │  kaynaklar arası çelişkiler
-                          └───────┬───────┘
-                                  ▼
-                          ┌───────────────┐
-                          │  SYNTHESIZER  │  bulgular + özet + açık sorular
-                          └───────┬───────┘
-                                  ▼
-                                 END  →  Markdown + JSON rapor
-```
-
-| Ajan | Girdi | Çıktı (tipli) |
-|---|---|---|
-| **Planner** | konu | `ResearchPlan` — alt sorular + her biri için 2-4 arama sorgusu |
-| **Researcher** (×N, paralel) | bir alt soru | `Source[]` + `Claim[]` |
-| **Cross-check** | tüm claim'ler + kaynaklar | `Contradiction[]` (severity + çözüm kararı) |
-| **Synthesizer** | claim'ler + çelişkiler | `Finding[]` + yönetici özeti + açık sorular |
-
-Tüm ajan çıktıları **Pydantic şemasıyla** zorlanır (`with_structured_output`) — ajanlar
-düzyazı değil, tipli veri alışverişi yapar.
-
----
-
-## Akış, adım adım
-
-1. **Planla** — konu, birbirinden bağımsız 4-6 alt soruya bölünür. En az bir alt soru
-   anaakım görüşü *sorgulayacak* şekilde istenir ki çelişki yüzeye çıksın.
-2. **Fan-out** — `Send()` ile her alt soru için bir dal açılır.
-3. **Ara** — her dal kendi sorgularını paralel çalıştırır, sonuçlar URL'ye göre tekilleştirilir.
-4. **Oku** — sayfalar eşzamanlı indirilir, HTML script/style/nav gürültüsünden arındırılır,
-   disk önbelleğine yazılır.
-5. **Claim çıkar** — LLM kaynak metinlerinden atomik, kaynak kimliği taşıyan iddialar çıkarır.
-6. **Join** — tüm dallar bitene kadar beklenir; `operator.add` reducer'ları sonuçları birleştirir.
-7. **Çapraz kontrol** — claim'ler karşılaştırılır; gerçek olgusal çatışmalar bulunur,
-   şiddetleri belirlenir ve her biri için bir çözüm kararı verilir.
-8. **Sentezle** — bulgular, yönetici özeti ve cevaplanamayan sorular **paralel** üretilir.
-9. **Raporla** — Markdown + JSON çıktısı.
-
----
-
-## Kullanım
-
-### CLI
+The Exa provider uses Exa's `/search` endpoint with the `x-api-key` header. To verify your own Exa account and key with one real query:
 
 ```bash
-# Mock mod (anahtarsız, ağsız)
-uv run research-swarm "quantum error correction progress" --mock
-
-# Dosyaya yaz
-uv run research-swarm "konu" --out out/report.md --json out/report.json
-
-# Sağlayıcı/model seç, plan boyutunu ayarla
-uv run research-swarm "konu" --provider gemini --model gemini-3.8-flash \
-    --search exa --max-subquestions 6 --results-per-query 5 --concurrency 8
-
-# Sadece raporu bas
-uv run research-swarm "konu" --quiet
+export EXA_API_KEY="your-exa-api-key"
+uv run research-swarm "recent advances in grid-scale battery storage" \
+  --provider gemini --search exa --max-subquestions 2 --results-per-query 2 \
+  --out out/exa-live-report.md --json out/exa-live-report.json
 ```
 
-`--out` / `--json` verilmezse rapor doğrudan stdout'a yazılır; ilerleme günlükleri stderr'e gider.
+This command runs the full research pipeline and writes a report that records `search:exa` in its run metadata. Use a valid LLM key as well, or set `--provider mock` if you only want to verify Exa search results without a real synthesis model. **A live Exa request has not been performed from this repository session because no Exa API key was available here.** No live-test result is claimed.
 
-### Python API
+> A mock search corpus is explicitly synthetic and must not be cited as factual evidence. Real research requires a live search provider and a configured LLM.
+
+## Web UI
+
+The Streamlit UI is a one-question research workspace with provider selection, optional API-key entry, configurable research breadth, report preview, and Markdown/JSON/HTML/PDF downloads. Keys entered in the UI are used only for the current app process; for production deployments use environment secrets rather than shared/public app inputs.
+
+```bash
+uv sync --extra app --extra google
+uv run streamlit run app/streamlit_app.py
+```
+
+For local development without a paid LLM, select the `mock` model and `mock` search provider.
+
+## CLI
+
+```bash
+# Offline, deterministic run
+uv run research-swarm "quantum error correction progress" --mock
+
+# Save Markdown and JSON
+uv run research-swarm "tidal energy economics" --out out/report.md --json out/report.json
+
+# Choose providers and tune parallelism
+uv run research-swarm "grid-scale storage" --provider gemini --search exa \
+  --max-subquestions 6 --results-per-query 5 --concurrency 8
+
+# Print only the report
+uv run research-swarm "topic" --quiet
+```
+
+Progress logs go to stderr; the report goes to stdout unless an output file is specified.
+
+## Python API
 
 ```python
 import asyncio
@@ -154,136 +89,52 @@ from research_swarm import Settings, run_research
 async def main():
     settings = Settings(llm_provider="gemini", search_provider="exa", max_subquestions=5)
     report = await run_research("tidal energy economics", settings)
-
     print(report.executive_summary)
     for finding in report.findings:
         print(finding.heading, finding.source_ids, finding.confidence)
-    for c in report.contradictions:
-        print(f"[{c.severity}] {c.description} -> {c.resolution}")
-    print(report.stats.model_dump())
 
 asyncio.run(main())
 ```
 
-Canlı ilerleme için `on_event=(node_name, update) -> None` geri çağrısını verin.
+## Architecture
 
----
-
-## Tasarım kararları
-
-**1. Paralellik `Send()` ile, `asyncio.gather` ile değil.**
-Grafik seviyesinde fan-out kullanılıyor; her dal ayrı bir grafik düğümü olduğu için
-durumu, hataları ve ilerlemeyi ayrı ayrı izlenebiliyor. Dal içinde de arama/sayfa okuma
-işlemleri kendi içinde eşzamanlı.
-
-**2. Kaynak kimlikleri URL'ye göre paylaştırılır.**
-Naif yaklaşımda iki farklı dal aynı sayfayı bulduğunda rapora **iki kopya** düşer.
-`Runtime.citation_ids()` normalleştirilmiş URL'ye göre kimlik verir; fan-in'de
-`dedupe_by_id()` tekilleştirir. Bu, `tests/test_citations.py` ile doğrulanır.
-
-**3. Her dal hata izole eder.**
-Bir arama sorgusu, bir sayfa indirmesi veya bir alt soru çökerse yalnızca o dal boş döner;
-`errors` kanalına kaydedilir ve `## Run warnings` altında raporlanır. Grafik devam eder.
-Planner bile çökse rapor üretilir (canlı testte gözlemlendi).
-
-**4. Mock mod birinci sınıf vatandaş.**
-`MockLLM` prompt'un saf fonksiyonudur — deterministik ve ağsız. Bu sayede tüm grafik,
-gerçek durum geçişleriyle, CI'da ve anahtarsız test edilebilir. Ölçtüğümüz paralellik
-sonuçları bu moddan geliyor.
-
-**5. Bağımlılıklar hafif tutulur.**
-Search sağlayıcıları ham `httpx` ile konuşur (SDK sürüm kayması yok). HTML→metin
-dönüşümü için trafilatura/readability yerine küçük bir `html.parser` tabanlı çıkarıcı var.
-
----
-
-## Ölçümler
-
-Paralellik gerçekten ölçüldü (`tests/test_parallelism.py`, her arama çağrısına 0.25s gecikme
-enjekte edilerek):
-
-```
-arama çağrısı       : 8
-tepe eşzamanlılık   : 5
-sıralı olsaydı      : 2.00s
-gerçek duvar saati  : 0.51s
-hızlanma            : 3.9x
+```text
+START → PLANNER → parallel RESEARCHER branches → CROSS-CHECK → SYNTHESIZER → REPORT
+                       search → read → extract claims
 ```
 
-Test yalnızca zamana değil, **gözlenen tepe eşzamanlılığa** da bakar — meşgul bir makinede
-zamanlama tek başına zayıf bir kanıttır.
+The planner creates independent questions. LangGraph `Send()` fans them out to isolated researcher nodes. Each branch searches, deduplicates URLs, checks `robots.txt`, reads allowed pages, and extracts source-backed claims. The cross-check agent identifies disagreements, then synthesis creates findings, an executive summary, and open questions. Errors are retained as run warnings instead of silently discarding the rest of the run.
 
-Gerçek Gemini gecikmesi (ücretsiz kota, `gemini-3.8-flash`):
+## Exports
 
-| Yapılandırma | Planlama çağrısı |
-|---|---|
-| `GEMINI_THINKING_BUDGET=0` | 68s |
-| varsayılan (düşünme açık) | 109s |
+The Python API exposes `render_markdown`, `render_json`, `render_html`, and `render_pdf`. HTML is self-contained and print-friendly. PDF generation is available with the `app` extra (`reportlab`). The Streamlit UI offers downloads for each format.
 
-Mutlak sürelerde asıl belirleyici ücretsiz kotanın kısıtlaması. `GEMINI_THINKING_BUDGET=0`
-iyi tanımlanmış çıkarım görevlerinde ölçülebilir şekilde daha hızlı (~%40); varsayılan
-olarak boş bırakıldı, yani sağlayıcının kendi kararı geçerli.
-
----
-
-## Test
+## Tests
 
 ```bash
-uv run pytest -q          # 49 test, tamamı ağsız ve anahtarsız
+uv run pytest -q
 ```
 
-Kapsam: model doğrulama, HTML çıkarımı + önbellek, sağlayıcı çözümleme, mock LLM
-determinizmi, uçtan uca grafik, atıf çözümlemesi, eşzamanlı kimlik tahsisi, paralellik
-ölçümü, Markdown/JSON render ve bozuk-girdi davranışı.
+The test suite is designed to run offline and without provider keys. It covers configuration, provider resolution, page extraction and cache, citations, mock end-to-end graph execution, concurrency, and report rendering. Live provider tests are intentionally opt-in and require user-supplied credentials.
 
----
+## Project layout
 
-## Proje yapısı
-
-```
+```text
 src/research_swarm/
-  models.py              Pydantic şemaları (Plan, Source, Claim, Contradiction, Report)
-  config.py              ortam değişkenleri + sağlayıcı çözümleme
-  state.py               LangGraph durum şeması (operator.add reducer'ları)
-  graph.py               StateGraph topolojisi + Send() fan-out
-  runner.py              uçtan uca giriş noktası
-  report.py              Markdown / JSON render
-  cli.py                 komut satırı arayüzü
-  llm.py                 LangChain sağlayıcıları + MockLLM protokolü
-  mock_llm.py            deterministik çevrimdışı LLM
-  agents/
-    runtime.py           enjekte edilen bağımlılıklar, atıf kayıt defteri, yardımcılar
-    planner.py           konu → alt sorular
-    researcher.py        ara → oku → claim çıkar (paralel çalışan birim)
-    contradiction.py     kaynaklar arası çelişki tespiti
-    synthesizer.py       bulgular + özet + açık sorular
-  providers/
-    base.py              SearchProvider protokolü + fabrika
-    tavily.py exa.py serpapi.py gemini_grounding.py mock.py
-    fetch.py             eşzamanlı sayfa okuyucu + HTML→metin + disk önbelleği
-    http.py              paylaşılan httpx istemcisi, yeniden deneme, backoff
-tests/                   pytest paketi (hepsi çevrimdışı)
-examples/quickstart.py   çalıştırılabilir örnek
+  agents/                 planner, researcher, cross-check, synthesis
+  providers/              Exa, Tavily, SerpAPI, Gemini, mock, page fetcher
+  models.py               Pydantic report schemas
+  graph.py                LangGraph topology and fan-out
+  runner.py               end-to-end Python entry point
+  report.py               Markdown, JSON, HTML, and PDF rendering
+  cli.py                  command-line interface
+app/streamlit_app.py       interactive web interface
+ tests/                    offline pytest suite
 ```
 
----
+## Limitations
 
-## Sınırlar (dürüst liste)
-
-- **Gerçek arama sağlayıcıları canlı test edilmedi.** `tavily`, `exa`, `serpapi` ve
-  `gemini_grounding` uygulandı ama elde yalnızca Gemini anahtarı olduğu için yalnızca
-  `mock` arama uçtan uca doğrulandı. İlk gerçek anahtarınızda beklenmedik alan adı
-  farklılıkları çıkabilir.
-- **Gemini grounding ücretsiz kotada 429 döndü** — kod yolu hazır, kota yok.
-- **`mock` arama + gerçek LLM = 0 claim** (yukarıda açıklandı).
-- Sayfa okuma `robots.txt`'e saygı duymaz; üretimde bir politika katmanı eklenmelidir.
-- Rapor doğruluğu kaynak kalitesine bağlıdır; atıf kimlikleri LLM'in prompt'ta gördüğü
-  kaynaklarla sınırlandırılır ama **uydurma atıf** riski tamamen ortadan kalkmaz —
-  her bulgunun `source_ids`'i kaynak listesine karşı doğrulanır, içerik doğrulanmaz.
-
-## Sonraki adımlar
-
-- Gerçek arama sağlayıcısıyla canlı doğrulama + entegrasyon testi
-- `langgraph-checkpoint` ile kesintiye dayanıklı (resumable) uzun koşular
-- Alaka/credibility puanlama ajanı (şu an sıralama sağlayıcıya bırakılıyor)
-- Raporu PDF/HTML olarak dışa aktarma
+- Research quality depends on the selected search provider, source quality, and LLM. Citations are constrained to collected sources, but citations do not prove that a claim is true.
+- `robots.txt` is checked per origin and cached for the process. If its policy cannot be retrieved, crawling is blocked conservatively; sites returning 404 are treated as having no published robots policy.
+- Live Exa/Tavily/SerpAPI verification requires API credentials and is not represented as completed in this repository session.
+- The mock provider is for demos and tests only; its generated pages are fictional.
