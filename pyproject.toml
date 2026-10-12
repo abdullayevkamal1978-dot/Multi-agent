@@ -1,0 +1,47 @@
+[project]
+name = "research-swarm"
+version = "0.1.0"
+description = "Multi-agent deep-research system built on LangGraph: plans, searches, reads, cross-checks contradictions and synthesizes a cited report."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "langgraph>=0.2.60",
+    "langchain-core>=0.3.30",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# LLM backends - install the one you have a key for.
+google = ["langchain-google-genai>=2.0"]
+openai = ["langchain-openai>=0.3"]
+anthropic = ["langchain-anthropic>=0.3"]
+# Optional search SDK (the Tavily/Exa/SerpAPI providers also work with plain HTTP,
+# so no SDK is strictly required).
+tavily = ["tavily-python>=0.5"]
+all = [
+    "langchain-google-genai>=2.0",
+    "langchain-openai>=0.3",
+    "langchain-anthropic>=0.3",
+]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+research-swarm = "research_swarm.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_swarm"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
