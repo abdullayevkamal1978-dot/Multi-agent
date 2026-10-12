@@ -1,7 +1,7 @@
 .PHONY: install test demo live clean
 
 install:
-	uv sync --extra google --extra dev
+	uv sync --extra app --extra all --extra dev
 
 test:
 	uv run pytest -q

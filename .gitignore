@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 .cache/
 out/
 *.egg-info/
@@ -10,3 +12,4 @@ out/
 dist/
 build/
 .tools/
+.streamlit/secrets.toml

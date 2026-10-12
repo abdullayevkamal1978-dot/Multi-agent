@@ -22,7 +22,7 @@ cp .env.example .env  # add provider keys as needed
 uv run research-swarm "solid-state battery commercialization timeline" --mock
 
 # Run the web UI
-uv sync --extra app --extra google
+uv sync --extra app --extra all
 uv run streamlit run app/streamlit_app.py
 ```
 
@@ -37,29 +37,28 @@ Set `LLM_PROVIDER` and `SEARCH_PROVIDER` to a provider name, or leave them as `a
 
 ### Exa live smoke test
 
-The Exa provider uses Exa's `/search` endpoint with the `x-api-key` header. To verify your own Exa account and key with one real query:
+The Exa provider uses Exa's `/search` endpoint with the `x-api-key` header. A live provider smoke test was run on **2026-10-12** using one real query: `grid-scale battery storage recent advances 2026`. The authenticated Exa request succeeded and returned three results:
 
-```bash
-export EXA_API_KEY="your-exa-api-key"
-uv run research-swarm "recent advances in grid-scale battery storage" \
-  --provider gemini --search exa --max-subquestions 2 --results-per-query 2 \
-  --out out/exa-live-report.md --json out/exa-live-report.json
-```
+- [A 3.1 MWh grid battery energized in eastern Wisconsin runs with no cooling system](https://energiesmedia.com/3-1-mwh-grid-battery-energized/)
+- [Graphene-Like-Armored Nanosheet Assemblies toward Fast and Stable High-Mass-Loading Sodium Storage](https://doi.org/10.1021/jacs.6c13892) — ACS Publications
+- [Hithium's sodium-ion storage push, where it could win, where it won't, and path to bankability](https://www.pv-magazine.com/2026/10/07/hithiums-sodium-ion-storage-push-where-it-could-win-where-it-wont-and-path-to-bankability/) — pv magazine
 
-This command runs the full research pipeline and writes a report that records `search:exa` in its run metadata. Use a valid LLM key as well, or set `--provider mock` if you only want to verify Exa search results without a real synthesis model. **A live Exa request has not been performed from this repository session because no Exa API key was available here.** No live-test result is claimed.
+This verifies Exa search-provider connectivity and returned result metadata; it is **not** a claim that an LLM-synthesized report fact-checked these external pages. The query was one direct provider call with a three-result limit. No secret value is stored in this repository.
 
 > A mock search corpus is explicitly synthetic and must not be cited as factual evidence. Real research requires a live search provider and a configured LLM.
 
 ## Web UI
 
-The Streamlit UI is a one-question research workspace with provider selection, optional API-key entry, configurable research breadth, report preview, and Markdown/JSON/HTML/PDF downloads. Keys entered in the UI are used only for the current app process; for production deployments use environment secrets rather than shared/public app inputs.
+The Streamlit UI is a one-question research workspace with provider selection, masked API-key entry, configurable research breadth, visible stage progress, cited report preview, source details, run diagnostics, and Markdown/JSON/HTML/PDF downloads. Visitor-entered keys remain in the active Streamlit session and are not persisted to files or a database. `auto` uses the offline mock rather than silently consuming a server-side LLM key.
 
 ```bash
-uv sync --extra app --extra google
+uv sync --extra app --extra all
 uv run streamlit run app/streamlit_app.py
 ```
 
-For local development without a paid LLM, select the `mock` model and `mock` search provider.
+For local development without provider credentials, use `auto`/`mock` or select the `mock` model and search provider.
+
+The optional site-owned Exa key is used only when a visitor explicitly checks **Use the site's shared Exa credits for this run**. Shared-key runs are limited to 2 research branches, 2 results per query, 3 starts per browser session per UTC day, and 20 starts per app process per UTC day. These in-memory limits are best-effort safeguards, **not** an account-wide billing cap; restarts, multiple replicas, and fresh browser sessions have separate counters. Bring your own Exa key for unrestricted runs, or configure an account-side spend limit with the provider.
 
 ## CLI
 
@@ -136,5 +135,11 @@ app/streamlit_app.py       interactive web interface
 
 - Research quality depends on the selected search provider, source quality, and LLM. Citations are constrained to collected sources, but citations do not prove that a claim is true.
 - `robots.txt` is checked per origin and cached for the process. If its policy cannot be retrieved, crawling is blocked conservatively; sites returning 404 are treated as having no published robots policy.
-- Live Exa/Tavily/SerpAPI verification requires API credentials and is not represented as completed in this repository session.
+- Live Exa verification is limited to the one-query smoke test documented above; it does not certify source quality or a complete live LLM run. Tavily and SerpAPI live checks remain unperformed.
 - The mock provider is for demos and tests only; its generated pages are fictional.
+
+## Permanent hosted website
+
+The app runs in a production container from the repository's `Dockerfile`, listening on `0.0.0.0:$PORT` (default `3000`). An ASGI gateway serves the route manifest and proxies Streamlit's HTTP and WebSocket traffic to its private listener. The health path is `/_stcore/health`. The image installs the `app` and `all` extras, so the selectable Gemini, OpenAI and Anthropic LLMs are available. The managed deployment serves the app and public route manifest at `public/manus-routes.json`; no database is needed. Rebuilds use the committed `uv.lock`. API credentials are runtime secrets and must never be committed or copied into the image.
+
+The header photograph is an optimized notebook image sourced from Unsplash search and stored locally as WebP. The brand mark is an original SVG.
