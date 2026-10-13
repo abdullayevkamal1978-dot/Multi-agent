@@ -46,10 +46,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
+# packages zaten static/ alt dizinini de kapsar; ayrıca force-include
+# vermek aynı dosyayı iki kez ekler ve hatchling non-editable wheel
+# build'inde hata fırlatır (Vercel --no-editable kullanır).
 packages = ["src/research_swarm"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/research_swarm/static" = "research_swarm/static"
 
 # Vercel's Python runtime looks for an ASGI app in a handful of default
 # filenames (app.py, main.py, server.py, ...). Our app lives inside the package,
